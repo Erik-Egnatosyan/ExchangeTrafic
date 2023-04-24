@@ -185,7 +185,5 @@
             public string date { get; set; }
             public Rates rates { get; set; }
         }
-
-
     }
 }

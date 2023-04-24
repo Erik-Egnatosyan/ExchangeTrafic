@@ -1,9 +1,15 @@
-﻿using Microsoft.AspNetCore.DataProtection.KeyManagement;
+﻿using System.Data.SqlClient;//
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;//
 using System.Net;
 using System.Text.Json;
-using System.Data.SqlClient;
+using Newtonsoft.Json.Linq;//
+using Newtonsoft.Json;
+using System.Configuration;
+using System.Data;
+
+
 
 namespace ExchangeTrafic.Controllers
 {
@@ -24,18 +30,23 @@ namespace ExchangeTrafic.Controllers
             if (response.IsSuccessStatusCode)
             {
                 SaveInputs = await response.Content.ReadAsStringAsync();
+                Console.WriteLine(SaveInputs);
             }
             else
             {
                 return "NotFound";
             }
-
             return SaveInputs;
         }
-
-        [HttpGet]
-        public async Task<IActionResult> Get()
+        [HttpGet("GetJsonRates")]
+        public async Task<IActionResult> GetJsonRatesAsync()
         {
+            string connectionString = "Data Source=(localdb)\\mssqllocaldb;Initial Catalog=Rates;Integrated Security=True";
+            SqlConnection connection = new SqlConnection(connectionString);
+            connection.Open();
+
+            string SaveInputs = string.Empty;
+            Dictionary<string, decimal> keyValuePairs = new Dictionary<string, decimal>();
             HttpClient httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.Add("apikey", "vbjeljWWPNFs5FGuVoXeefSI6jdplMS1");
 
@@ -44,36 +55,29 @@ namespace ExchangeTrafic.Controllers
 
             if (response.IsSuccessStatusCode)
             {
-                string responseString = await response.Content.ReadAsStringAsync();
-                Dictionary<string, object> responseJson = JsonSerializer.Deserialize<Dictionary<string, object>>(responseString);
+                SaveInputs = await response.Content.ReadAsStringAsync();
+                JObject json = JObject.Parse(SaveInputs);
+                keyValuePairs = json["rates"].ToObject<Dictionary<string, decimal>>();
 
-                // Создаем соединение с базой данных
-                string connectionString = "Data Source=(localdb)\\mssqllocaldb;Initial Catalog=VegaVestaNew;Integrated Security=True";
-                SqlConnection connection = new SqlConnection(connectionString);
+                string insertCommand = "INSERT INTO JsonKeyValues (Currency, RateMoney) VALUES (@currency, @rate)";
+                SqlCommand command = new SqlCommand(insertCommand, connection);
 
-                connection.Open();
-
-                // Создаем SQL-запрос INSERT для добавления данных в таблицу
-                string insertQuery = "INSERT INTO Options ([URL], Headers, Setting1, Setting2, Setting3) VALUES (@url, @headers, @setting1, @setting2, @setting3)";
-                SqlCommand command = new SqlCommand(insertQuery, connection);
-                command.Parameters.AddWithValue("@url", url);
-                command.Parameters.AddWithValue("@headers", JsonSerializer.Serialize(httpClient.DefaultRequestHeaders));
-                command.Parameters.AddWithValue("@setting1", JsonSerializer.Serialize(responseJson["setting1"]));
-                command.Parameters.AddWithValue("@setting2", JsonSerializer.Serialize(responseJson["setting2"]));
-                command.Parameters.AddWithValue("@setting3", JsonSerializer.Serialize(responseJson["setting3"]));
-
-                // Выполняем SQL-запрос INSERT
-                command.ExecuteNonQuery();
-
-                // Закрываем соединение с базой данных
-                connection.Close();
-
-                return Ok(responseJson);
+                foreach (KeyValuePair<string, decimal> pair in keyValuePairs)
+                {
+                    command.Parameters.AddWithValue("@currency", pair.Key);
+                    command.Parameters.AddWithValue("@rate", pair.Value);
+                    command.ExecuteNonQuery();
+                    command.Parameters.Clear();
+                }
             }
             else
             {
-                return BadRequest();
+                return NotFound();
             }
+
+            connection.Close();
+            return Ok();
         }
+
     }
 }
