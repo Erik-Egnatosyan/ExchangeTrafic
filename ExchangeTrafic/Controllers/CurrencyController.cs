@@ -74,10 +74,8 @@ namespace ExchangeTrafic.Controllers
             {
                 return NotFound();
             }
-
             connection.Close();
             return Ok();
         }
-
     }
 }
